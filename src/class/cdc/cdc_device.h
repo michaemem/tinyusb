@@ -216,6 +216,25 @@ uint16_t cdcd_open            (uint8_t rhport, tusb_desc_interface_t const * itf
 bool     cdcd_control_xfer_cb (uint8_t rhport, uint8_t stage, tusb_control_request_t const * request);
 bool     cdcd_xfer_cb         (uint8_t rhport, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes);
 
+
+// Get the Receive FIFO (for DMA transfer)
+tu_fifo_t* tud_cdc_n_get_rx_ff (uint8_t itf);
+
+// Get the transmit FIFO (for DMA transfer)
+tu_fifo_t* tud_cdc_n_get_tx_ff (uint8_t itf);
+
+// Get the Receive FIFO
+static inline tu_fifo_t* tud_cdc_get_rx_ff (void)
+{
+  return tud_cdc_n_get_rx_ff(0);
+}
+
+// Get the transmit FIFO
+static inline tu_fifo_t* tud_cdc_get_tx_ff (void)
+{
+  return tud_cdc_n_get_tx_ff(0);
+}
+
 #ifdef __cplusplus
  }
 #endif
