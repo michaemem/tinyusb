@@ -46,11 +46,7 @@ int main(void)
   board_init();
 
   // init device stack on configured roothub port
-  tusb_rhport_init_t dev_init = {
-    .role = TUSB_ROLE_DEVICE,
-    .speed = TUSB_SPEED_AUTO
-  };
-  tusb_init(BOARD_TUD_RHPORT, &dev_init);
+  tud_init(BOARD_TUD_RHPORT);
 
 #if (CFG_TUSB_MCU == OPT_MCU_RP2040)
   stdio_init_all();

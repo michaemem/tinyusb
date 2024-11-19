@@ -78,11 +78,7 @@ int main(void) {
   printf("TinyUSB Host MassStorage Explorer Example\r\n");
 
   // init host stack on configured roothub port
-  tusb_rhport_init_t host_init = {
-    .role = TUSB_ROLE_HOST,
-    .speed = TUSB_SPEED_AUTO
-  };
-  tusb_init(BOARD_TUH_RHPORT, &host_init);
+  tuh_init(BOARD_TUH_RHPORT);
 
   if (board_init_after_tusb) {
     board_init_after_tusb();

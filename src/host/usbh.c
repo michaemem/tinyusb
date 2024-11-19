@@ -278,6 +278,15 @@ static void process_removing_device(uint8_t rhport, uint8_t hub_addr, uint8_t hu
 static bool usbh_edpt_control_open(uint8_t dev_addr, uint8_t max_packet_size);
 static bool usbh_control_xfer_cb (uint8_t daddr, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes);
 
+#if CFG_TUSB_OS == OPT_OS_NONE
+// TODO rework time-related function later
+// weak and overridable
+TU_ATTR_WEAK void osal_task_delay(uint32_t msec) {
+  const uint32_t start = hcd_frame_number(_usbh_controller);
+  while ( ( hcd_frame_number(_usbh_controller) - start ) < msec ) {}
+}
+#endif
+
 TU_ATTR_ALWAYS_INLINE static inline bool queue_event(hcd_event_t const * event, bool in_isr) {
   TU_ASSERT(osal_queue_send(_usbh_q, event, in_isr));
   tuh_event_hook_cb(event->rhport, event->event_id, in_isr);
@@ -343,13 +352,11 @@ bool tuh_inited(void) {
   return _usbh_controller != TUSB_INDEX_INVALID_8;
 }
 
-bool tuh_rhport_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
-  if (tuh_rhport_is_active(rhport)) {
-    return true; // skip if already initialized
-  }
+bool tuh_init(uint8_t rhport) {
+  // skip if already initialized
+  if (tuh_rhport_is_active(rhport)) return true;
 
-  TU_LOG_USBH("USBH init on controller %u, speed = %s\r\n", rhport,
-    rh_init->speed == TUSB_SPEED_HIGH ? "High" : "Full");
+  TU_LOG_USBH("USBH init on controller %u\r\n", rhport);
 
   // Init host stack if not already
   if (!tuh_inited()) {
@@ -395,8 +402,8 @@ bool tuh_rhport_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
   }
 
   // Init host controller
-  _usbh_controller = rhport;
-  TU_ASSERT(hcd_init(rhport, rh_init));
+  _usbh_controller = rhport;;
+  TU_ASSERT(hcd_init(rhport));
   hcd_int_enable(rhport);
 
   return true;
@@ -438,9 +445,9 @@ bool tuh_deinit(uint8_t rhport) {
 }
 
 bool tuh_task_event_ready(void) {
-  if (!tuh_inited()) {
-    return false; // Skip if stack is not initialized
-  }
+  // Skip if stack is not initialized
+  if ( !tuh_inited() ) return false;
+
   return !osal_queue_empty(_usbh_q);
 }
 
@@ -452,7 +459,7 @@ bool tuh_task_event_ready(void) {
     int main(void)
     {
       application_init();
-      tusb_init(0, TUSB_ROLE_HOST);
+      tusb_init();
 
       while(1) // the mainloop
       {
@@ -478,27 +485,17 @@ void tuh_task_ext(uint32_t timeout_ms, bool in_isr) {
         // due to the shared _usbh_ctrl_buf, we must complete enumerating one device before enumerating another one.
         // TODO better to have an separated queue for newly attached devices
         if (_dev0.enumerating) {
-          // Some device can cause multiple duplicated attach events
-          // drop current enumerating and start over for a proper port reset
-          if (event.rhport == _dev0.rhport && event.connection.hub_addr == _dev0.hub_addr &&
-              event.connection.hub_port == _dev0.hub_port) {
-            // abort/cancel current enumeration and start new one
-            TU_LOG1("[%u:] USBH Device Attach (duplicated)\r\n", event.rhport);
-            tuh_edpt_abort_xfer(0, 0);
-            enum_new_device(&event);
-          } else {
-            TU_LOG_USBH("[%u:] USBH Defer Attach until current enumeration complete\r\n", event.rhport);
+          TU_LOG_USBH("[%u:] USBH Defer Attach until current enumeration complete\r\n", event.rhport);
 
-            bool is_empty = osal_queue_empty(_usbh_q);
-            queue_event(&event, in_isr);
+          bool is_empty = osal_queue_empty(_usbh_q);
+          queue_event(&event, in_isr);
 
-            if (is_empty) {
-              // Exit if this is the only event in the queue, otherwise we may loop forever
-              return;
-            }
+          if (is_empty) {
+            // Exit if this is the only event in the queue, otherwise we may loop forever
+            return;
           }
         } else {
-          TU_LOG1("[%u:] USBH Device Attach\r\n", event.rhport);
+          TU_LOG_USBH("[%u:] USBH DEVICE ATTACH\r\n", event.rhport);
           _dev0.enumerating = 1;
           enum_new_device(&event);
         }
@@ -604,12 +601,12 @@ bool tuh_control_xfer (tuh_xfer_t* xfer) {
   TU_VERIFY(xfer->ep_addr == 0 && xfer->setup);
 
   // Check if device is still connected (enumerating for dev0)
-  const uint8_t daddr = xfer->daddr;
-  if (daddr == 0) {
-    TU_VERIFY(_dev0.enumerating);
+  uint8_t const daddr = xfer->daddr;
+  if ( daddr == 0 ) {
+    if (!_dev0.enumerating) return false;
   } else {
-    const usbh_device_t* dev = get_device(daddr);
-    TU_VERIFY(dev && dev->connected);
+    usbh_device_t const* dev = get_device(daddr);
+    if (dev && dev->connected == 0) return false;
   }
 
   // pre-check to help reducing mutex lock
@@ -779,26 +776,24 @@ bool tuh_edpt_xfer(tuh_xfer_t* xfer) {
 }
 
 bool tuh_edpt_abort_xfer(uint8_t daddr, uint8_t ep_addr) {
+  usbh_device_t* dev = get_device(daddr);
+  TU_VERIFY(dev);
+
   TU_LOG_USBH("[%u] Aborted transfer on EP %02X\r\n", daddr, ep_addr);
 
-  const uint8_t epnum = tu_edpt_number(ep_addr);
-  const uint8_t dir   = tu_edpt_dir(ep_addr);
+  uint8_t const epnum = tu_edpt_number(ep_addr);
+  uint8_t const dir   = tu_edpt_dir(ep_addr);
 
-  if (epnum == 0) {
-    // Also include dev0 for aborting enumerating
-    const uint8_t rhport = usbh_get_rhport(daddr);
-
+  if ( epnum == 0 ) {
     // control transfer: only 1 control at a time, check if we are aborting the current one
     TU_VERIFY(daddr == _ctrl_xfer.daddr && _ctrl_xfer.stage != CONTROL_STAGE_IDLE);
-    hcd_edpt_abort_xfer(rhport, daddr, ep_addr);
-    _set_control_xfer_stage(CONTROL_STAGE_IDLE); // reset control transfer state to idle
+    TU_VERIFY(hcd_edpt_abort_xfer(dev->rhport, daddr, ep_addr));
+    // reset control transfer state to idle
+    _set_control_xfer_stage(CONTROL_STAGE_IDLE);
   } else {
-    usbh_device_t* dev = get_device(daddr);
-    TU_VERIFY(dev);
-
-    TU_VERIFY(dev->ep_status[epnum][dir].busy); // non-control skip if not busy
-    hcd_edpt_abort_xfer(dev->rhport, daddr, ep_addr);
-
+    // non-control skip if not busy
+    TU_VERIFY(dev->ep_status[epnum][dir].busy);
+    TU_VERIFY(hcd_edpt_abort_xfer(dev->rhport, daddr, ep_addr));
     // mark as ready and release endpoint if transfer is aborted
     dev->ep_status[epnum][dir].busy = false;
     tu_edpt_release(&dev->ep_status[epnum][dir], _usbh_mutex);
@@ -1284,9 +1279,9 @@ static void process_removing_device(uint8_t rhport, uint8_t hub_addr, uint8_t hu
 //--------------------------------------------------------------------+
 
 enum {
-  ENUM_RESET_DELAY_MS = 50,       // USB specs: 10 to 50ms
-  ENUM_DEBOUNCING_DELAY_MS = 450, // when plug/unplug a device, physical connection can be bouncing and may
-                                  // generate a series of attach/detach event. This delay wait for stable connection
+  ENUM_RESET_DELAY = 50, // USB specs: 10 to 50ms
+  ENUM_CONTACT_DEBOUNCING_DELAY = 450, // when plug/unplug a device, physical connection can be bouncing and may
+                                       // generate a series of attach/detach event. This delay wait for stable connection
 };
 
 enum {
@@ -1325,7 +1320,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
     bool retry = _dev0.enumerating && (failed_count < ATTEMPT_COUNT_MAX);
     if ( retry ) {
       failed_count++;
-      tusb_time_delay_ms_api(ATTEMPT_DELAY_MS); // delay a bit
+      osal_task_delay(ATTEMPT_DELAY_MS); // delay a bit
       TU_LOG1("Enumeration attempt %u\r\n", failed_count);
       retry = tuh_control_xfer(xfer);
     }
@@ -1367,7 +1362,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
     }
 
     case ENUM_HUB_GET_STATUS_2:
-      tusb_time_delay_ms_api(ENUM_RESET_DELAY_MS);
+      osal_task_delay(ENUM_RESET_DELAY);
       TU_ASSERT(hub_port_get_status(_dev0.hub_addr, _dev0.hub_port, _usbh_ctrl_buf,
                                     process_enumeration, ENUM_HUB_CLEAR_RESET_2),);
       break;
@@ -1405,7 +1400,7 @@ static void process_enumeration(tuh_xfer_t* xfer) {
         if (_dev0.hub_addr == 0) {
           // connected directly to roothub
           hcd_port_reset( _dev0.rhport );
-          tusb_time_delay_ms_api(RESET_DELAY); // TODO may not work for no-OS on MCU that require reset_end() since
+          osal_task_delay(RESET_DELAY); // TODO may not work for no-OS on MCU that require reset_end() since
                                         // sof of controller may not running while resetting
           hcd_port_reset_end(_dev0.rhport);
           // TODO: fall through to SET ADDRESS, refactor later
@@ -1427,9 +1422,9 @@ static void process_enumeration(tuh_xfer_t* xfer) {
 
     case ENUM_GET_DEVICE_DESC: {
       // Allow 2ms for address recovery time, Ref USB Spec 9.2.6.3
-      tusb_time_delay_ms_api(2);
+      osal_task_delay(2);
 
-      const uint8_t new_addr = (uint8_t) tu_le16toh(xfer->setup->wValue);
+      uint8_t const new_addr = (uint8_t) tu_le16toh(xfer->setup->wValue);
 
       usbh_device_t* new_dev = get_device(new_addr);
       TU_ASSERT(new_dev,);
@@ -1517,25 +1512,20 @@ static void process_enumeration(tuh_xfer_t* xfer) {
   }
 }
 
-
-
 static bool enum_new_device(hcd_event_t* event) {
   _dev0.rhport = event->rhport;
   _dev0.hub_addr = event->connection.hub_addr;
   _dev0.hub_port = event->connection.hub_port;
 
   if (_dev0.hub_addr == 0) {
-    // connected directly to roothub
+    // connected/disconnected directly with roothub
     hcd_port_reset(_dev0.rhport);
-
-    // Since we are in middle of rhport reset, frame number is not available yet.
-    // need to depend on tusb_time_millis_api()
-    tusb_time_delay_ms_api(ENUM_RESET_DELAY_MS);
-
+    osal_task_delay(ENUM_RESET_DELAY); // TODO may not work for no-OS on MCU that require reset_end() since
+    // sof of controller may not running while resetting
     hcd_port_reset_end(_dev0.rhport);
 
     // wait until device connection is stable TODO non blocking
-    tusb_time_delay_ms_api(ENUM_DEBOUNCING_DELAY_MS);
+    osal_task_delay(ENUM_CONTACT_DEBOUNCING_DELAY);
 
     // device unplugged while delaying
     if (!hcd_port_connect_status(_dev0.rhport)) {
@@ -1556,11 +1546,12 @@ static bool enum_new_device(hcd_event_t* event) {
   }
 #if CFG_TUH_HUB
   else {
-    // connected via external hub
+    // connected/disconnected via external hub
     // wait until device connection is stable TODO non blocking
-    tusb_time_delay_ms_api(ENUM_DEBOUNCING_DELAY_MS);
+    osal_task_delay(ENUM_CONTACT_DEBOUNCING_DELAY);
 
     // ENUM_HUB_GET_STATUS
+    //TU_ASSERT( hub_port_get_status(_dev0.hub_addr, _dev0.hub_port, _usbh_ctrl_buf, enum_hub_get_status0_complete, 0) );
     TU_ASSERT(hub_port_get_status(_dev0.hub_addr, _dev0.hub_port, _usbh_ctrl_buf,
                                   process_enumeration, ENUM_HUB_CLEAR_RESET_1));
   }

@@ -39,27 +39,20 @@
 /* CONSTANTS
  *------------------------------------------------------------------*/
 
-typedef enum {
-  TUSB_ROLE_INVALID = 0,
-  TUSB_ROLE_DEVICE  = 0x1,
-  TUSB_ROLE_HOST    = 0x2,
-} tusb_role_t;
-
 /// defined base on EHCI specs value for Endpoint Speed
 typedef enum {
   TUSB_SPEED_FULL = 0,
   TUSB_SPEED_LOW  = 1,
   TUSB_SPEED_HIGH = 2,
-  TUSB_SPEED_AUTO = 0xaa,
   TUSB_SPEED_INVALID = 0xff,
 } tusb_speed_t;
 
 /// defined base on USB Specs Endpoint's bmAttributes
 typedef enum {
-  TUSB_XFER_CONTROL     = 0,
-  TUSB_XFER_ISOCHRONOUS = 1,
-  TUSB_XFER_BULK        = 2,
-  TUSB_XFER_INTERRUPT   = 3
+  TUSB_XFER_CONTROL = 0 ,
+  TUSB_XFER_ISOCHRONOUS ,
+  TUSB_XFER_BULK        ,
+  TUSB_XFER_INTERRUPT
 } tusb_xfer_type_t;
 
 typedef enum {
@@ -224,10 +217,10 @@ enum {
 // USB 2.0 Spec Table 9-7: Test Mode Selectors
 typedef enum {
   TUSB_FEATURE_TEST_J = 1,
-  TUSB_FEATURE_TEST_K = 2,
-  TUSB_FEATURE_TEST_SE0_NAK = 3,
-  TUSB_FEATURE_TEST_PACKET = 4,
-  TUSB_FEATURE_TEST_FORCE_ENABLE = 5,
+  TUSB_FEATURE_TEST_K,
+  TUSB_FEATURE_TEST_SE0_NAK,
+  TUSB_FEATURE_TEST_PACKET,
+  TUSB_FEATURE_TEST_FORCE_ENABLE,
 } tusb_feature_test_mode_t;
 
 //--------------------------------------------------------------------+
@@ -264,7 +257,7 @@ typedef enum {
 } microsoft_os_20_type_t;
 
 enum {
-  CONTROL_STAGE_IDLE = 0,
+  CONTROL_STAGE_IDLE,
   CONTROL_STAGE_SETUP,
   CONTROL_STAGE_DATA,
   CONTROL_STAGE_ACK
@@ -273,14 +266,6 @@ enum {
 enum {
   TUSB_INDEX_INVALID_8 = 0xFFu
 };
-
-//--------------------------------------------------------------------+
-//
-//--------------------------------------------------------------------+
-typedef struct {
-  tusb_role_t role;
-  tusb_speed_t speed;
-} tusb_rhport_init_t;
 
 //--------------------------------------------------------------------+
 // USB Descriptors

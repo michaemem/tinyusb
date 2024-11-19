@@ -46,10 +46,9 @@ tu_static State state = {false, 0, 0};
 // All no-ops as we are fuzzing.
 //--------------------------------------------------------------------+
 extern "C" {
-bool dcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
+void dcd_init(uint8_t rhport) {
   UNUSED(rhport);
-  UNUSED(rh_init);
-  return true;
+  return;
 }
 
 void dcd_int_handler(uint8_t rhport) {

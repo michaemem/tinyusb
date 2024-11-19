@@ -33,6 +33,18 @@
 #include "bsp/board_api.h"
 #include "board.h"
 
+#ifdef BOARD_TUD_RHPORT
+  #define PORT_SUPPORT_DEVICE(_n)  (BOARD_TUD_RHPORT == _n)
+#else
+  #define PORT_SUPPORT_DEVICE(_n)  0
+#endif
+
+#ifdef BOARD_TUH_RHPORT
+  #define PORT_SUPPORT_HOST(_n)    (BOARD_TUH_RHPORT == _n)
+#else
+  #define PORT_SUPPORT_HOST(_n)    0
+#endif
+
 //--------------------------------------------------------------------+
 // MACRO TYPEDEF CONSTANT ENUM
 //--------------------------------------------------------------------+
@@ -59,11 +71,11 @@
 // Forward USB interrupt events to TinyUSB IRQ Handler
 //--------------------------------------------------------------------+
 void USB0_IRQHandler(void) {
-  tusb_int_handler(0, true);
+  tud_int_handler(0);
 }
 
 void USB1_IRQHandler(void) {
-  tusb_int_handler(1, true);
+  tud_int_handler(1);
 }
 
 /****************************************************************
@@ -148,7 +160,7 @@ void board_init(void) {
 
 #if defined(FSL_FEATURE_SOC_USBHSD_COUNT) && FSL_FEATURE_SOC_USBHSD_COUNT
   // LPC546xx and LPC540xx has OTG 1 FS + 1 HS rhports
-  #if defined(BOARD_TUD_RHPORT) && BOARD_TUD_RHPORT == 0
+  #if PORT_SUPPORT_DEVICE(0)
     // Port0 is Full Speed
     POWER_DisablePD(kPDRUNCFG_PD_USB0_PHY); /*< Turn on USB Phy */
     CLOCK_SetClkDiv(kCLOCK_DivUsb0Clk, 1, false);
@@ -162,7 +174,7 @@ void board_init(void) {
     CLOCK_EnableUsbfs0DeviceClock(kCLOCK_UsbSrcFro, CLOCK_GetFroHfFreq());
   #endif
 
-  #if defined(BOARD_TUD_RHPORT) && BOARD_TUD_RHPORT == 1
+  #if PORT_SUPPORT_DEVICE(1)
     // Port1 is High Speed
     POWER_DisablePD(kPDRUNCFG_PD_USB1_PHY);
 

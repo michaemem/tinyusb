@@ -265,9 +265,9 @@ static void process_bus_resume(uint8_t rhport)
 /*------------------------------------------------------------------*/
 /* Device API
  *------------------------------------------------------------------*/
-bool dcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
+void dcd_init(uint8_t rhport)
+{
   (void) rhport;
-  (void) rh_init;
 
   // save crystal-less setting (if available)
   #if defined(FSL_FEATURE_USB_KHCI_IRC48M_MODULE_CLOCK_ENABLED) && FSL_FEATURE_USB_KHCI_IRC48M_MODULE_CLOCK_ENABLED == 1
@@ -294,8 +294,6 @@ bool dcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
 
   dcd_connect(rhport);
   NVIC_ClearPendingIRQ(USB0_IRQn);
-
-  return true;
 }
 
 void dcd_int_enable(uint8_t rhport)

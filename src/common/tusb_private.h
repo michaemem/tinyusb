@@ -24,21 +24,15 @@
  * This file is part of the TinyUSB stack.
  */
 
-#ifndef TUSB_PRIVATE_H_
-#define TUSB_PRIVATE_H_
+
+#ifndef _TUSB_PRIVATE_H_
+#define _TUSB_PRIVATE_H_
 
 // Internal Helper used by Host and Device Stack
 
 #ifdef __cplusplus
  extern "C" {
 #endif
-
-#define TUP_USBIP_CONTROLLER_NUM 2
-extern tusb_role_t _tusb_rhport_role[TUP_USBIP_CONTROLLER_NUM];
-
-//--------------------------------------------------------------------+
-// Endpoint
-//--------------------------------------------------------------------+
 
 typedef struct TU_ATTR_PACKED {
   volatile uint8_t busy    : 1;
@@ -169,4 +163,4 @@ bool tu_edpt_stream_peek(tu_edpt_stream_t* s, uint8_t* ch) {
  }
 #endif
 
-#endif
+#endif /* _TUSB_PRIVATE_H_ */

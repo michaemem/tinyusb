@@ -368,9 +368,10 @@ static void process_bus_reset(uint8_t rhport)
 /*------------------------------------------------------------------*/
 /* Host API
  *------------------------------------------------------------------*/
-bool hcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
-  (void) rhport;
-  (void) rh_init;
+bool hcd_init(uint8_t rhport)
+{
+  (void)rhport;
+
   KHCI->USBTRC0 |= USB_USBTRC0_USBRESET_MASK;
   while (KHCI->USBTRC0 & USB_USBTRC0_USBRESET_MASK);
 
